@@ -6,14 +6,12 @@ import androidx.room.RoomDatabase;
 import android.content.Context;
 
 import com.example.crudusuariosproductos.dominio.Usuario;
-import com.example.crudusuariosproductos.dominio.Producto;
 
-@Database(entities = {Usuario.class, Producto.class}, version = 1)
+@Database(entities = {Usuario.class}, version = 1)
 public abstract class AppDatabase extends RoomDatabase {
     private static volatile AppDatabase instancia;
 
     public abstract UsuarioDao usuarioDao();
-    public abstract ProductoDao productoDao();
 
     public static AppDatabase getInstance(Context context) {
         if (instancia == null) {
@@ -22,7 +20,7 @@ public abstract class AppDatabase extends RoomDatabase {
                     instancia = Room.databaseBuilder(
                             context.getApplicationContext(),
                             AppDatabase.class,
-                            "mi_base_de_datos"
+                            "usuarios_db"
                     ).build();
                 }
             }
