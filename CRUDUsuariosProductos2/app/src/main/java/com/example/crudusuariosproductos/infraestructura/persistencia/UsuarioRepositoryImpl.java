@@ -1,42 +1,65 @@
 package com.example.crudusuariosproductos.infraestructura.persistencia;
 
+import android.util.Log;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
+import java.util.List;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 import com.example.crudusuariosproductos.dominio.Usuario;
 import com.example.crudusuariosproductos.dominio.UsuarioRepository;
+import com.example.crudusuariosproductos.network.ApiService;
 
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+public abstract class UsuarioRepositoryImpl implements UsuarioRepository {
 
-public class UsuarioRepositoryImpl implements UsuarioRepository {
-    private final UsuarioDao usuarioDao;
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private UsuarioDao usuarioDao;
+    private ApiService apiService;
+    private MutableLiveData<List<Usuario>> usuariosLiveData = new MutableLiveData<>();
 
-    public UsuarioRepositoryImpl(UsuarioDao usuarioDao) {
+    public UsuarioRepositoryImpl(UsuarioDao usuarioDao, ApiService apiService) {
         this.usuarioDao = usuarioDao;
+        this.apiService = apiService;
+    }
+
+    @Override
+    public LiveData<List<Usuario>> obtenerUsuarios() {
+        // Primero intenta obtener los datos desde la API
+        apiService.getUsers().enqueue(new Callback<List<Usuario>>() {
+            @Override
+            public void onResponse(Call<List<Usuario>> call, Response<List<Usuario>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    List<Usuario> usuarios = response.body();
+                    usuariosLiveData.postValue(usuarios);
+                    // Guardar en la base de datos local (ROOM)
+                    new Thread(() -> usuarioDao.insertarUsuario(usuarios)).start();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<Usuario>> call, Throwable t) {
+                Log.e("UsuarioRepositoryImpl", "Error al obtener usuarios de la API", t);
+            }
+        });
+
+        // Si falla la API, retorna los datos locales desde ROOM
+        return (LiveData<List<Usuario>>) usuarioDao.obtenerTodosLosUsuarios();
     }
 
     @Override
     public void insertarUsuario(Usuario usuario) {
-        executorService.execute(() -> usuarioDao.insertarUsuario(usuario));
-    }
+        apiService.createUser(usuario).enqueue(new Callback<Usuario>() {
+            @Override
+            public void onResponse(Call<Usuario> call, Response<Usuario> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    new Thread(() -> usuarioDao.insertarUsuario((List<Usuario>) response.body())).start();
+                }
+            }
 
-    @Override
-    public void actualizarUsuario(Usuario usuario) {
-        executorService.execute(() -> usuarioDao.actualizarUsuario(usuario));
-    }
-
-    @Override
-    public void eliminarUsuario(Usuario usuario) {
-        executorService.execute(() -> usuarioDao.eliminarUsuario(usuario));
-    }
-
-    @Override
-    public Usuario obtenerUsuarioPorId(int id) {
-        return usuarioDao.obtenerUsuarioPorId(id);
-    }
-
-    @Override
-    public List<Usuario> obtenerTodosLosUsuarios() {
-        return usuarioDao.obtenerTodosLosUsuarios();
+            @Override
+            public void onFailure(Call<Usuario> call, Throwable t) {
+                Log.e("UsuarioRepositoryImpl", "Error al insertar usuario en la API", t);
+            }
+        });
     }
 }
